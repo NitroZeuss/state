@@ -25,7 +25,7 @@ interface Article {
   comments?: number;
   likes?: number;
   created_at?: string;
-  category?: string; // Added: Category ID from the backend
+  category?: string;
 }
 
 interface Category {
@@ -50,7 +50,7 @@ export function ArticleDashboard() {
 
         // Fetch categories first
         const categoryResponse = await fetch("https://hypo-backend-3.onrender.com/def/category/", {
-          cache: "no-store", // Prevent caching issues
+          cache: "no-store",
         });
         if (!categoryResponse.ok) {
           throw new Error(`Error fetching categories: ${categoryResponse.status}`);
@@ -68,28 +68,29 @@ export function ArticleDashboard() {
 
         // Fetch articles
         const articleResponse = await fetch("https://hypo-backend-3.onrender.com/def/article/", {
-          cache: "no-store", // Prevent caching issues
+          cache: "no-store",
         });
         if (!articleResponse.ok) {
           throw new Error(`Error fetching articles: ${articleResponse.status}`);
         }
         const articleData = await articleResponse.json();
 
+        // Log raw article data to debug author structure
+        console.log("Raw article data:", JSON.stringify(articleData, null, 2));
+
         const transformedArticles = Array.isArray(articleData)
           ? articleData.map((article: any) => {
-              let authorName = "Unknown Author";
-              let authorUsername = "";
-              let authorAvatar = null;
-
-              if (article.author) {
-                authorName = article.author.name || article.author.username || "Unknown Author";
-                authorUsername = article.author.username || "";
-                authorAvatar = article.author.profile_image;
-              } else if (article.user) {
-                authorName = article.user.name || article.user.username || "Unknown Author";
-                authorUsername = article.user.username || "";
-                authorAvatar = article.user.profile_image;
-              }
+              // Extract author data
+              const authorObj = article.author || article.user || {};
+              // Try multiple possible field names for the author's name
+              const authorName =
+                authorObj.name ||
+                authorObj.first_name ||
+                authorObj.username ||
+                authorObj.email?.split("@")[0] ||
+                "Unknown Author";
+              const authorUsername = authorObj.username || authorObj.email?.split("@")[0] || "";
+              const authorAvatar = authorObj.profile_image || authorObj.avatar || null;
 
               let imageUrl = null;
               if (article.image) {
@@ -118,14 +119,12 @@ export function ArticleDashboard() {
                 comments: article.comments || 0,
                 likes: article.likes || 0,
                 created_at: article.created_at || new Date().toISOString(),
-                category: article.category || "", // Ensure category field is captured
+                category: article.category || "",
               };
             })
           : [];
 
-        // Log the transformed articles to debug category field
         console.log("Transformed articles:", transformedArticles);
-
         setArticles(transformedArticles);
       } catch (err) {
         console.error("Failed to fetch data:", err);
@@ -143,11 +142,11 @@ export function ArticleDashboard() {
   // Filter articles based on the active tab (category)
   const filteredArticles =
     activeTab === "for-you"
-      ? articles // Show all articles for "For you"
+      ? articles
       : articles.filter((article) => {
           const category = categories.find((cat) => cat.slug === activeTab);
           if (!category) return false;
-          return article.category === category.id; // Match by category ID
+          return article.category === category.id;
         });
 
   return (
@@ -300,7 +299,7 @@ function getSampleArticles(): Article[] {
       id: "1",
       title: "The Future of AI: Opportunities and Challenges",
       content: "Artificial intelligence is rapidly transforming industries across the globe...",
-      author: { name: "Alex Johnson", avatar: "/placeholder.svg?height=40&width=40" },
+      author: { name: "Alex Johnson", username: "alexj", avatar: "/placeholder.svg?height=40&width=40" },
       publishedAt: "2025-03-15T10:30:00Z",
       readTime: "8 min read",
       image: "/placeholder.svg?height=200&width=300",
@@ -314,7 +313,7 @@ function getSampleArticles(): Article[] {
       id: "2",
       title: "Healthcare in Crisis: A Global Perspective",
       content: "The global healthcare system is facing unprecedented challenges...",
-      author: { name: "Sarah Lee", avatar: "/placeholder.svg?height=40&width=40" },
+      author: { name: "Sarah Lee", username: "sarahl", avatar: "/placeholder.svg?height=40&width=40" },
       publishedAt: "2025-03-16T09:00:00Z",
       readTime: "5 min read",
       image: "/placeholder.svg?height=200&width=300",
