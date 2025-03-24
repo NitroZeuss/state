@@ -34,6 +34,18 @@ interface Category {
   slug?: string;
 }
 
+interface User {
+  id: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  email?: string;
+  profile_image?: string;
+  avatar?: string;
+  profile_picture?: string;
+}
+
 export function ArticleDashboard() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -48,9 +60,21 @@ export function ArticleDashboard() {
       try {
         setLoading(true);
 
-        // Fetch categories first
+        // Get the token from localStorage
+        const token = localStorage.getItem("token");
+        if (!token) {
+          console.warn("No token found. Author data might be unavailable. Please log in.");
+        }
+
+        const headers = {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        };
+
+        // Fetch categories
         const categoryResponse = await fetch("https://hypo-backend-3.onrender.com/def/category/", {
           cache: "no-store",
+          headers,
         });
         if (!categoryResponse.ok) {
           throw new Error(`Error fetching categories: ${categoryResponse.status}`);
@@ -69,6 +93,7 @@ export function ArticleDashboard() {
         // Fetch articles
         const articleResponse = await fetch("https://hypo-backend-3.onrender.com/def/article/", {
           cache: "no-store",
+          headers,
         });
         if (!articleResponse.ok) {
           throw new Error(`Error fetching articles: ${articleResponse.status}`);
@@ -78,51 +103,131 @@ export function ArticleDashboard() {
         // Log raw article data to debug author structure
         console.log("Raw article data:", JSON.stringify(articleData, null, 2));
 
-        const transformedArticles = Array.isArray(articleData)
-          ? articleData.map((article: any) => {
-              // Extract author data
-              const authorObj = article.author || article.user || {};
-              // Try multiple possible field names for the author's name
-              const authorName =
-                authorObj.name ||
-                authorObj.first_name ||
-                authorObj.username ||
-                authorObj.email?.split("@")[0] ||
-                "Unknown Author";
-              const authorUsername = authorObj.username || authorObj.email?.split("@")[0] || "";
-              const authorAvatar = authorObj.profile_image || authorObj.avatar || null;
+        // Fetch users from the auth/users endpoint
+        let users: User[] = [];
+        if (token) {
+          try {
+            const usersResponse = await fetch("https://hypo-backend-3.onrender.com/auth/users/", {
+              method: "GET",
+              headers,
+            });
 
-              let imageUrl = null;
-              if (article.image) {
-                imageUrl = `https://res.cloudinary.com/dxf2c3jnr/${article.image}`;
+            if (!usersResponse.ok) {
+              throw new Error(`Error fetching users: ${usersResponse.status} - ${usersResponse.statusText}`);
+            }
+
+            users = await usersResponse.json();
+            console.log("Fetched users:", JSON.stringify(users, null, 2));
+          } catch (userError) {
+            console.error("Failed to fetch users:", userError);
+            users = [];
+          }
+        } else {
+          console.warn("No token available to fetch users.");
+        }
+
+        // Transform articles and match authors with users
+        const transformedArticles = (Array.isArray(articleData) ? articleData : []).map((article: any) => {
+          // Log the entire article to see all fields
+          console.log(`Processing article: ${article.title}`, JSON.stringify(article, null, 2));
+
+          // Extract author data
+          const authorObj = article.author || article.user || article.created_by || article.owner || {};
+
+          // Log the author object
+          console.log(`Author object for article "${article.title}":`, authorObj);
+
+          // Extract author name
+          const possibleNameFields = [
+            authorObj.name,
+            authorObj.first_name,
+            authorObj.last_name,
+            authorObj.firstName,
+            authorObj.lastName,
+            authorObj.full_name,
+            authorObj.fullName,
+            authorObj.username,
+            authorObj.email?.split("@")[0],
+            article.author_name,
+            article.user_name,
+            article.created_by_name,
+            article.owner_name,
+          ];
+
+          let authorName = "Unknown Author";
+          if (authorObj.first_name && authorObj.last_name) {
+            authorName = `${authorObj.first_name} ${authorObj.last_name}`.trim();
+          } else if (authorObj.firstName && authorObj.lastName) {
+            authorName = `${authorObj.firstName} ${authorObj.lastName}`.trim();
+          } else {
+            authorName = possibleNameFields.find((field) => field !== undefined && field !== null) || "Unknown Author";
+          }
+
+          // Normalize author name for matching
+          const normalizedAuthorName = authorName.toLowerCase().replace(/\s+/g, " ").trim();
+          console.log(`Normalized author name for article "${article.title}": ${normalizedAuthorName}`);
+
+          // Extract author username
+          const authorUsername = authorObj.username || authorObj.email?.split("@")[0] || "";
+
+          // Find the matching user in the users list
+          let avatarUrl = null;
+          if (users.length > 0) {
+            const matchedUser = users.find((user: User) => {
+              const userName = (user.name ||
+                (user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : null) ||
+                user.username ||
+                user.email?.split("@")[0] ||
+                "").toLowerCase().replace(/\s+/g, " ").trim();
+              console.log(`Comparing user name "${userName}" with article author "${normalizedAuthorName}"`);
+              return userName === normalizedAuthorName;
+            });
+
+            if (matchedUser) {
+              console.log(`Matched user for article "${article.title}":`, JSON.stringify(matchedUser, null, 2));
+              const profileImage = matchedUser.profile_image || matchedUser.avatar || matchedUser.profile_picture || null;
+              if (profileImage) {
+                avatarUrl = profileImage.startsWith("http")
+                  ? profileImage
+                  : `https://res.cloudinary.com/dxf2c3jnr/${profileImage}`;
+                console.log(`Formatted avatar URL for article "${article.title}": ${avatarUrl}`);
+              } else {
+                console.warn(`No profile image found for matched user in article "${article.title}".`);
               }
+            } else {
+              console.warn(`No matching user found for author "${authorName}" in article "${article.title}".`);
+            }
+          } else {
+            console.warn(`No users fetched. Cannot match author for article "${article.title}".`);
+          }
 
-              let avatarUrl = authorAvatar
-                ? `https://res.cloudinary.com/dxf2c3jnr/${authorAvatar}`
-                : null;
+          // Extract article image
+          let imageUrl = null;
+          if (article.image) {
+            imageUrl = `https://res.cloudinary.com/dxf2c3jnr/${article.image}`;
+          }
 
-              const readTime =
-                article.readTime ||
-                (article.content
-                  ? `${Math.max(1, Math.ceil(article.content.length / 1000))} min read`
-                  : "3 min read");
+          const readTime =
+            article.readTime ||
+            (article.content
+              ? `${Math.max(1, Math.ceil(article.content.length / 1000))} min read`
+              : "3 min read");
 
-              return {
-                id: article.id || Math.random().toString(36).substring(2),
-                title: article.title || "Untitled Article",
-                content: article.content || "",
-                author: { name: authorName, username: authorUsername, avatar: avatarUrl },
-                publishedAt: article.publishedAt || article.created_at || new Date().toISOString(),
-                readTime,
-                image: imageUrl,
-                views: article.views || 0,
-                comments: article.comments || 0,
-                likes: article.likes || 0,
-                created_at: article.created_at || new Date().toISOString(),
-                category: article.category || "",
-              };
-            })
-          : [];
+          return {
+            id: article.id || Math.random().toString(36).substring(2),
+            title: article.title || "Untitled Article",
+            content: article.content || "",
+            author: { name: authorName, username: authorUsername, avatar: avatarUrl },
+            publishedAt: article.publishedAt || article.created_at || new Date().toISOString(),
+            readTime,
+            image: imageUrl,
+            views: article.views || 0,
+            comments: article.comments || 0,
+            likes: article.likes || 0,
+            created_at: article.created_at || new Date().toISOString(),
+            category: article.category || "",
+          };
+        });
 
         console.log("Transformed articles:", transformedArticles);
         setArticles(transformedArticles);
@@ -135,7 +240,6 @@ export function ArticleDashboard() {
         setLoading(false);
       }
     }
-
     fetchData();
   }, []);
 
@@ -276,13 +380,15 @@ export function ArticleDashboard() {
                     </a>
                   </li>
                 </ul>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4 border-gray-300 text-gray-700 hover:bg-gray-100"
-                >
-                  Start writing
-                </Button>
+                <a href="https://state-chi.vercel.app/write" target="_blank" rel="noopener noreferrer">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    Start writing
+                  </Button>
+                </a>
               </div>
             </div>
           </div>
