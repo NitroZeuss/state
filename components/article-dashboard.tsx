@@ -8,11 +8,13 @@ import { ArticleCard } from "@/components/article-card";
 import { StaffPick } from "@/components/staff-pick";
 import { TopicBadge } from "@/components/topic-badge";
 import { Navbar } from "@/components/navbar";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Article {
   id: string;
   title: string;
-  content: string;
+  content: string; // Markdown content
   author: {
     name: string;
     avatar?: string;
@@ -60,7 +62,6 @@ export function ArticleDashboard() {
       try {
         setLoading(true);
 
-        // Get the token from localStorage
         const token = localStorage.getItem("token");
         if (!token) {
           console.warn("No token found. Author data might be unavailable. Please log in.");
@@ -68,7 +69,7 @@ export function ArticleDashboard() {
 
         const headers = {
           "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
 
         // Fetch categories
@@ -100,10 +101,9 @@ export function ArticleDashboard() {
         }
         const articleData = await articleResponse.json();
 
-        // Log raw article data to debug author structure
         console.log("Raw article data:", JSON.stringify(articleData, null, 2));
 
-        // Fetch users from the auth/users endpoint
+        // Fetch users
         let users: User[] = [];
         if (token) {
           try {
@@ -126,18 +126,10 @@ export function ArticleDashboard() {
           console.warn("No token available to fetch users.");
         }
 
-        // Transform articles and match authors with users
+        // Transform articles
         const transformedArticles = (Array.isArray(articleData) ? articleData : []).map((article: any) => {
-          // Log the entire article to see all fields
-          console.log(`Processing article: ${article.title}`, JSON.stringify(article, null, 2));
-
-          // Extract author data
           const authorObj = article.author || article.user || article.created_by || article.owner || {};
 
-          // Log the author object
-          console.log(`Author object for article "${article.title}":`, authorObj);
-
-          // Extract author name
           const possibleNameFields = [
             authorObj.name,
             authorObj.first_name,
@@ -163,45 +155,32 @@ export function ArticleDashboard() {
             authorName = possibleNameFields.find((field) => field !== undefined && field !== null) || "Unknown Author";
           }
 
-          // Normalize author name for matching
           const normalizedAuthorName = authorName.toLowerCase().replace(/\s+/g, " ").trim();
-          console.log(`Normalized author name for article "${article.title}": ${normalizedAuthorName}`);
-
-          // Extract author username
           const authorUsername = authorObj.username || authorObj.email?.split("@")[0] || "";
 
-          // Find the matching user in the users list
           let avatarUrl = null;
           if (users.length > 0) {
             const matchedUser = users.find((user: User) => {
-              const userName = (user.name ||
+              const userName = (
+                user.name ||
                 (user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : null) ||
                 user.username ||
                 user.email?.split("@")[0] ||
-                "").toLowerCase().replace(/\s+/g, " ").trim();
-              console.log(`Comparing user name "${userName}" with article author "${normalizedAuthorName}"`);
+                ""
+              ).toLowerCase().replace(/\s+/g, " ").trim();
               return userName === normalizedAuthorName;
             });
 
             if (matchedUser) {
-              console.log(`Matched user for article "${article.title}":`, JSON.stringify(matchedUser, null, 2));
               const profileImage = matchedUser.profile_image || matchedUser.avatar || matchedUser.profile_picture || null;
               if (profileImage) {
                 avatarUrl = profileImage.startsWith("http")
                   ? profileImage
                   : `https://res.cloudinary.com/dxf2c3jnr/${profileImage}`;
-                console.log(`Formatted avatar URL for article "${article.title}": ${avatarUrl}`);
-              } else {
-                console.warn(`No profile image found for matched user in article "${article.title}".`);
               }
-            } else {
-              console.warn(`No matching user found for author "${authorName}" in article "${article.title}".`);
             }
-          } else {
-            console.warn(`No users fetched. Cannot match author for article "${article.title}".`);
           }
 
-          // Extract article image
           let imageUrl = null;
           if (article.image) {
             imageUrl = `https://res.cloudinary.com/dxf2c3jnr/${article.image}`;
@@ -210,7 +189,7 @@ export function ArticleDashboard() {
           const readTime =
             article.readTime ||
             (article.content
-              ? `${Math.max(1, Math.ceil(article.content.length / 1000))} min read`
+              ? `${Math.max(1, Math.ceil(article.content.length / 200))} min read`
               : "3 min read");
 
           return {
@@ -243,7 +222,6 @@ export function ArticleDashboard() {
     fetchData();
   }, []);
 
-  // Filter articles based on the active tab (category)
   const filteredArticles =
     activeTab === "for-you"
       ? articles
@@ -257,7 +235,7 @@ export function ArticleDashboard() {
     <div className="min-h-screen bg-gray-100">
       <Navbar />
 
-      {/* Header (Matches ArticleWritePage) */}
+      {/* Header */}
       <header className="bg-white border-b border-gray-200 py-2 px-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -268,7 +246,7 @@ export function ArticleDashboard() {
         </div>
       </header>
 
-      {/* Toolbar-like Area for Category Filter */}
+      {/* Category Filter */}
       <div className="bg-gray-50 border-b border-gray-200 py-3 px-4">
         <div className="max-w-5xl mx-auto flex items-center gap-2 overflow-x-auto">
           <Button
@@ -340,6 +318,18 @@ export function ArticleDashboard() {
                 )}
               </div>
             )}
+            {/* Start writing button for mobile */}
+            <div className="mt-6">
+              <a href="https://state-chi.vercel.app/write" target="_blank" rel="noopener noreferrer">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-gray-300 text-gray-700 hover:bg-gray-100"
+                >
+                  Start writing
+                </Button>
+              </a>
+            </div>
           </div>
 
           <div className="hidden md:block">
@@ -380,6 +370,7 @@ export function ArticleDashboard() {
                     </a>
                   </li>
                 </ul>
+                {/* Start writing button for desktop */}
                 <a href="https://state-chi.vercel.app/write" target="_blank" rel="noopener noreferrer">
                   <Button
                     variant="outline"
@@ -398,13 +389,12 @@ export function ArticleDashboard() {
   );
 }
 
-// Fallback sample data
 function getSampleArticles(): Article[] {
   return [
     {
       id: "1",
       title: "The Future of AI: Opportunities and Challenges",
-      content: "Artificial intelligence is rapidly transforming industries across the globe...",
+      content: "Artificial intelligence is rapidly transforming industries across the globe. **This is bold**, *this is italic*, and ~~this is strikethrough~~.",
       author: { name: "Alex Johnson", username: "alexj", avatar: "/placeholder.svg?height=40&width=40" },
       publishedAt: "2025-03-15T10:30:00Z",
       readTime: "8 min read",
@@ -418,7 +408,7 @@ function getSampleArticles(): Article[] {
     {
       id: "2",
       title: "Healthcare in Crisis: A Global Perspective",
-      content: "The global healthcare system is facing unprecedented challenges...",
+      content: "The global healthcare system is facing unprecedented challenges. Here's a list:\n- Issue 1\n- Issue 2\n- Issue 3",
       author: { name: "Sarah Lee", username: "sarahl", avatar: "/placeholder.svg?height=40&width=40" },
       publishedAt: "2025-03-16T09:00:00Z",
       readTime: "5 min read",
