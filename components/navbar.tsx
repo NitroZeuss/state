@@ -77,7 +77,7 @@ export function Navbar() {
   };
 
   const handleWriteClick = () => {
-    router.push("/article/write");
+    router.push("/write");
   };
 
   return (
