@@ -293,3 +293,45 @@ export function ArticleDashboardRedesigned() {
     </div>
   );
 }
+
+// Fallback sample data
+function getSampleArticles(): Article[] {
+  return [
+    {
+      id: "1",
+      title: "The Future of AI: Opportunities and Challenges",
+      content: "Artificial intelligence is rapidly transforming industries across the globe...",
+      author: { name: "Alex Johnson", username: "alexj", avatar: "/placeholder.svg?height=40&width=40" },
+      publishedAt: "2025-03-15T10:30:00Z",
+      readTime: "8 min read",
+      image: "/placeholder.svg?height=200&width=300",
+      views: 1250,
+      comments: 48,
+      likes: 230,
+      created_at: "2025-03-15T10:30:00Z",
+      category: "1",
+    },
+    {
+      id: "2",
+      title: "Healthcare in Crisis: A Global Perspective",
+      content: "The global healthcare system is facing unprecedented challenges...",
+      author: { name: "Sarah Lee", username: "sarahl", avatar: "/placeholder.svg?height=40&width=40" },
+      publishedAt: "2025-03-16T09:00:00Z",
+      readTime: "5 min read",
+      image: "/placeholder.svg?height=200&width=300",
+      views: 890,
+      comments: 32,
+      likes: 150,
+      created_at: "2025-03-16T09:00:00Z",
+      category: "3",
+    },
+  ];
+}
+
+function getSampleCategories(): Category[] {
+  return [
+    { id: "1", name: "Technology", slug: "technology" },
+    { id: "2", name: "Politics", slug: "politics" },
+    { id: "3", name: "Health", slug: "health" },
+  ];
+}
